@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>도서 상세</title>
+  <style>
+    :root{ --bg:#f7f9fc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e5e7eb; --accent:#2563eb; }
+    *{ box-sizing:border-box } body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; color:var(--text); background:linear-gradient(#fff,var(--bg)) }
+    .container{ min-height:100svh; display:grid; place-items:center; padding:20px }
+    .card{ width:min(100%,1080px); background:var(--card); border:1px solid var(--border); border-radius:16px; box-shadow:0 10px 30px rgba(2,6,23,.06) }
+    .card-header{ padding:20px 24px; border-bottom:1px solid var(--border) }
+    .title{ font-size:clamp(20px,2.2vw,28px); font-weight:800; margin:0 0 4px }
+    .subtitle{ margin:0; color:#64748b; font-size:14px }
+    .card-body{ padding:20px 24px }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:space-between; align-items:center }
+    .ghost{ padding:10px 14px; border-radius:10px; background:#fff; border:1px solid var(--border); cursor:pointer; text-decoration:none; color:inherit }
+    .badge{ display:inline-block; background:#eef2ff; color:#1e293b; padding:8px 12px; border-radius:999px; font-weight:700 }
+    .hr{ height:1px; background:var(--border); margin:18px 0 }
+    .layout{ display:grid; grid-template-columns: 360px 1fr; gap:18px }
+    @media (max-width:860px){ .layout{ grid-template-columns:1fr } }
+    .imgbox{ width:100%; aspect-ratio:3/4; background:#f1f5f9; border:1px dashed #cbd5e1; border-radius:10px; display:grid; place-items:center; overflow:hidden }
+    .imgbox img{ width:100%; height:100%; object-fit:cover }
+    .title2{ font-size:22px; font-weight:800; margin:0 0 10px }
+    .grid2{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 14px }
+    .field{ border:1px solid var(--border); border-radius:8px; padding:10px 12px; background:#fff }
+    .label{ font-size:12px; color:#64748b; margin-bottom:4px }
+    .value{ font-weight:700 }
+    .small{ color:#64748b; font-size:12px }
+  </style>
+
+  <!-- SSE & 공유 data.js -->
+  <script>
+    (function(){
+      const sse = new EventSource('/events');
+      let current = null;
+      sse.onmessage = (e)=>{
+        try{
+          const {version} = JSON.parse(e.data||'{}');
+          if(current===null){ current=version; return; }
+          if(version && version!==current){
+            current = version;
+            const old = document.querySelector('script[data-shared="data"]');
+            const s = document.createElement('script');
+            s.src = '/assets/data.js?v=' + Date.now();
+            s.dataset.shared = 'data';
+            s.onload = ()=>{
+              if(window.DATA && !window.CATALOG) window.CATALOG = window.DATA;
+              window.dispatchEvent(new Event('data:updated'));
+            };
+            if(old) old.remove();
+            document.head.appendChild(s);
+          }
+        }catch(_){}
+      };
+    })();
+  </script>
+  <script data-shared="data" src="/assets/data.js"></script>
+  <script>if(window.DATA && !window.CATALOG) window.CATALOG = window.DATA;</script>
+</head>
+<body>
+  <div class="container">
+    <div class="card" role="region" aria-label="도서 상세">
+      <div class="card-header">
+        <h1 class="title">도서 상세</h1>
+        <p class="subtitle" id="sel"></p>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <a class="ghost" id="back-results" href="results.html">목록으로</a>
+          <a class="ghost" id="back-filters" href="filters.html">선택 다시</a>
+          <span class="badge" id="grade-badge">?학년</span>
+        </div>
+        <div class="hr"></div>
+
+        <div class="layout">
+          <div class="imgbox" id="imgbox"><div class="small">이미지 없음</div></div>
+          <div id="meta"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const p = new URLSearchParams(location.search);
+    const grade = p.get('grade');
+    const aud   = (p.get('aud') || '').split(',').filter(Boolean);
+    const sub   = (p.get('sub') || '').split(',').filter(Boolean);
+    const reg   = p.get('reg');
+    const titleQ= p.get('title');
+
+    document.getElementById('grade-badge').textContent = (grade || '?') + '학년';
+    document.getElementById('sel').textContent =
+      `학년: ${grade ?? '(미선택)'} · 자료유형: ${aud.join(', ') || '(전체)'} · 대분류: ${sub.join(', ') || '(전체)'}`;
+
+    const listQS = (() => {
+      const q = new URLSearchParams();
+      if (grade) q.set('grade', grade);
+      if (aud.length) q.set('aud', aud.join(','));
+      if (sub.length) q.set('sub', sub.join(','));
+      return '?' + q.toString();
+    })();
+    document.getElementById('back-results').href = 'results.html' + listQS;
+    document.getElementById('back-filters').href = 'filters.html' + (grade ? ('?grade='+encodeURIComponent(grade)) : '');
+
+    function pickItem(){
+      if(!Array.isArray(window.CATALOG)) return null;
+      let pool = window.CATALOG.slice();
+      if (aud.length) pool = pool.filter(x => aud.includes(String(x["자료유형"]||"").trim()));
+      if (sub.length) pool = pool.filter(x => sub.includes(String(x["대분류"]||"").trim()));
+
+      if (reg){
+        const found = pool.find(x => String(x["등록번호"]||"") === reg);
+        if (found) return found;
+      }
+      if (titleQ){
+        const found = pool.find(x => String(x["도서명"]||"") === titleQ);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    function tryLoadImage(regno){
+      if(!regno) return;
+      const exts = ['jpg','png','jpeg'];
+      const img = new Image();
+      let i = 0;
+      function next(){
+        if(i >= exts.length) return;
+        img.src = `images/${regno}.${exts[i++]}`;
+      }
+      img.onerror = next;
+      img.onload = () => {
+        const box = document.getElementById('imgbox');
+        box.innerHTML = '';
+        box.appendChild(img);
+      };
+      next();
+    }
+
+    function field(label, value){
+      const el = document.createElement('div');
+      el.className = 'field';
+      el.innerHTML = `<div class="label">${label}</div><div class="value">${value || '-'}</div>`;
+      return el;
+    }
+
+    function render(){
+      const meta = document.getElementById('meta');
+      const item = pickItem();
+      if(!item){
+        meta.innerHTML = '<div class="small">대상을 찾을 수 없습니다.</div>';
+        return;
+      }
+      tryLoadImage(item["등록번호"] || '');
+      meta.innerHTML = '';
+      const title = document.createElement('h2');
+      title.className = 'title2';
+      title.textContent = item["도서명"] || '(제목 없음)';
+
+      const grid = document.createElement('div');
+      grid.className = 'grid2';
+      grid.appendChild(field('청구기호', item["청구기호"]));
+      grid.appendChild(field('총서명', item["총서명"]));
+      grid.appendChild(field('저자명', item["저자명"]));
+      grid.appendChild(field('출판사', item["출판사"]));
+      grid.appendChild(field('대분류', item["대분류"]));
+      grid.appendChild(field('자료유형', item["자료유형"]));
+      grid.appendChild(field('등록번호', item["등록번호"] || ''));
+      if (typeof item["점수"] !== 'undefined') grid.appendChild(field('점수', String(item["점수"])));
+
+      meta.appendChild(title);
+      meta.appendChild(grid);
+    }
+
+    render();
+    window.addEventListener('data:updated', render);
+  </script>
+</body>
+</html>

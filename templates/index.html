@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>도서 대출·소장 통합 업데이트</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  <div class="max-w-5xl mx-auto p-6">
+    <h1 class="text-2xl font-bold mb-4">도서 대출·소장 통합 업데이트</h1>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="mb-4 space-y-2">
+          {% for msg in messages %}
+            <div class="rounded-md bg-red-50 p-4 text-red-700">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form class="space-y-6 bg-white rounded-xl shadow p-6" action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-700">소장도서목록 CSV (선택)</label>
+          <input type="file" name="holdings_csv" accept=".csv"
+                 class="mt-2 block w-full rounded-lg border-gray-300 shadow-sm"/>
+          <p class="text-xs text-gray-500 mt-1">
+            미업로드 시, 기본 파일 <span class="font-semibold">소장도서목록.csv</span> (assets 폴더)을 사용합니다.
+            {% if not default_holdings_exists %}<br><span class="text-red-600">※ 기본 파일이 없으면 오류가 납니다.</span>{% endif %}
+          </p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700">대출기록 엑셀(.xlsx) <span class="text-red-600">(필수)</span></label>
+          <input type="file" name="loans_xlsx" accept=".xlsx" required
+                 class="mt-2 block w-full rounded-lg border-gray-300 shadow-sm"/>
+          <p class="text-xs text-gray-500 mt-1">
+            파일을 업로드하지 않으면 <b>에러</b>가 발생합니다.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button type="submit"
+                class="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-white font-medium hover:bg-indigo-700">
+          처리 실행 → 결과 만들기
+        </button>
+
+        {% if output_exists %}
+        <a href="{{ url_for('download_output') }}"
+           class="inline-flex items-center rounded-lg bg-gray-100 px-4 py-2 font-medium hover:bg-gray-200">
+          최신 결과 다운로드 ({{ output_name }})
+        </a>
+        {% endif %}
+      </div>
+    </form>
+
+    <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-white rounded-xl shadow p-6">
+        <h2 class="font-semibold mb-2">업로드 가이드</h2>
+        <ul class="list-disc pl-5 text-sm text-gray-700 space-y-1">
+          <li><b>소장 CSV</b>: <em>청구기호</em> 열이 있어야 합니다(열 이름에 ‘청구’ 포함).</li>
+          <li><b>대출 엑셀(.xlsx)</b>: 시트명은 <code>1학년</code> ~ <code>9학년</code> (있는 시트만 처리)</li>
+          <li>각 시트에는 아래 중 하나 이상 포함(왼쪽일수록 우선 매칭):<br>
+              <code>등록번호</code> / <code>청구기호</code> / <code>ISBN</code> / <code>서명</code></li>
+          <li>등록번호/ISBN은 <b>셀 서식 = 텍스트</b>로 저장(선행 0 보존)</li>
+          <li>헤더는 1행, 병합/빈 행 없이 정돈된 표 형태 권장</li>
+          <li>결과 컬럼/순서는 항상 아래 17개로 고정됩니다:<br>
+            <code>등록번호, 도서명, 청구기호, 총서명, 저자명, 출판사, 대분류, 자료유형, 1학년~9학년</code>
+          </li>
+        </ul>
+      </div>
+
+      <div class="bg-white rounded-xl shadow p-6">
+        <h2 class="font-semibold mb-2">assets 폴더 파일</h2>
+        {% if assets %}
+          <div class="max-h-64 overflow-auto divide-y">
+            {% for f in assets %}
+              <div class="py-2 text-sm flex justify-between gap-2">
+                <span class="truncate">{{ f.name }}</span>
+                <span class="text-gray-500 shrink-0">{{ f.size }} · {{ f.mtime }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-sm text-gray-600">파일이 없습니다. 위에서 업로드하거나 폴더에 직접 넣어주세요.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <p class="mt-8 text-xs text-gray-500">
+      결과는 항상 <code>C:\Users\leeje\Desktop\kagle\assets\소장도서목록_학년별대출빈도.csv</code>로 저장/업데이트됩니다.
+    </p>
+  </div>
+</body>
+</html>

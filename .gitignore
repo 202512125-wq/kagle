@@ -1,0 +1,21 @@
+# Python/Flask
+__pycache__/
+*.pyc
+*.pyo
+
+# 가상환경
+venv/
+.env
+
+# OS/IDE
+.DS_Store
+.vscode/
+.idea/
+
+# 빌드 산출물/임시
+dist/
+build/
+
+# 민감/큰 데이터 (필요시 LFS 고려)
+assets/*.xlsx
+assets/*.csv

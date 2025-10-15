@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>분류 선택</title>
+  <style>
+    :root{ --bg:#f7f9fc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --accent:#2563eb; --border:#e5e7eb; --ring:#93c5fd; }
+    *{ box-sizing:border-box }
+    body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji; color:var(--text); background:linear-gradient(#fff, var(--bg)); }
+    .container{ min-height:100svh; display:grid; place-items:center; padding:20px }
+    .card{ width:min(100%,920px); background:var(--card); border:1px solid var(--border); border-radius:16px; box-shadow:0 10px 30px rgba(2,6,23,.06) }
+    .card-header{ padding:20px 24px; border-bottom:1px solid var(--border) }
+    .title{ font-size:clamp(20px,2.2vw,28px); font-weight:800; margin:0 0 4px }
+    .subtitle{ margin:0; color:var(--muted); font-size:14px }
+    .card-body{ padding:20px 24px }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between }
+    .badge{ display:inline-block; background:#eef2ff; color:#1e293b; padding:8px 12px; border-radius:999px; font-weight:700 }
+    .controls{ display:flex; gap:8px; flex-wrap:wrap }
+    .chip{ display:flex; gap:10px; align-items:center; padding:12px; border:1px solid var(--border); border-radius:12px; cursor:pointer; user-select:none; background:#fff }
+    .chip:hover{ background:#f8fafc }
+    .section{ margin-top:18px }
+    .section h3{ margin:0 0 8px; font-size:18px }
+    .count{ color:var(--muted); font-size:12px }
+    .hr{ height:1px; background:var(--border); margin:18px 0 }
+    .primary{ padding:12px 16px; border-radius:12px; background:var(--accent); color:#fff; border:none; font-weight:700; cursor:pointer }
+    .ghost{ padding:12px 16px; border-radius:12px; background:#fff; border:1px solid var(--border); cursor:pointer }
+    input[type="checkbox"]{ width:18px; height:18px }
+    .footer{ padding:14px 24px; border-top:1px solid var(--border); color:var(--muted); font-size:12px }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card" role="region" aria-label="분류 선택">
+      <div class="card-header">
+        <h1 class="title">도서 추천 — 분류 선택</h1>
+        <p class="subtitle">선택한 학년을 확인하고, 대상/주제 체크박스를 선택하세요.</p>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="row" style="gap:12px">
+            <span class="badge" id="grade-badge">?학년</span>
+            <h2 style="margin:0; font-size:clamp(20px,2vw,28px); font-weight:800">분류 선택</h2>
+          </div>
+          <div class="controls">
+            <a class="ghost" href="index.html" role="button">학년 다시 선택</a>
+            <button class="ghost" id="btn-reset" type="button">초기화</button>
+          </div>
+        </div>
+
+        <div class="hr" role="separator" aria-hidden="true"></div>
+
+        <section class="section" aria-labelledby="audience-title">
+          <h3 id="audience-title">대상</h3>
+          <div class="grid" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px" id="audience-wrap"></div>
+          <p class="count" id="audience-count">선택됨: 0개</p>
+        </section>
+
+        <div class="hr" role="separator" aria-hidden="true"></div>
+
+        <section class="section" aria-labelledby="subject-title">
+          <h3 id="subject-title">주제 분류</h3>
+          <div class="grid" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px" id="subject-wrap"></div>
+          <p class="count" id="subject-count">선택됨: 0개</p>
+        </section>
+
+        <div class="hr" role="separator" aria-hidden="true"></div>
+
+        <div class="row" style="justify-content:end">
+          <button class="primary" id="btn-apply" type="button">선택 적용</button>
+        </div>
+      </div>
+      <div class="footer">© 2025 — 분류 선택 페이지</div>
+    </div>
+  </div>
+
+  <script>
+    // URL에서 grade 파라미터 읽기
+    const params = new URLSearchParams(window.location.search);
+    const grade = params.get('grade');
+    document.getElementById('grade-badge').textContent = (grade ? grade : '?') + '학년';
+
+    // 옵션 데이터
+    const audienceOptions = [
+      { id: 'general', label: '일반' },
+      { id: 'kids', label: '유아' },
+      { id: 'onebook', label: '온책' },
+    ];
+    const subjectOptions = [
+      { id: 'literature', label: '문학' },
+      { id: 'language', label: '언어' },
+      { id: 'social', label: '사회과학' },
+      { id: 'history', label: '역사' },
+      { id: 'natural', label: '자연과학' },
+      { id: 'generalClass', label: '총류' },
+      { id: 'philosophy', label: '철학' },
+      { id: 'arts', label: '예술' },
+      { id: 'technology', label: '기술과학' },
+      { id: 'religion', label: '종교' },
+      { id: 'exception', label: '예외' },
+    ];
+
+    const audiences = new Map();
+    const subjects  = new Map();
+
+    const audWrap = document.getElementById('audience-wrap');
+    const subWrap = document.getElementById('subject-wrap');
+    const audCnt  = document.getElementById('audience-count');
+    const subCnt  = document.getElementById('subject-count');
+    const btnReset = document.getElementById('btn-reset');
+    const btnApply = document.getElementById('btn-apply');
+
+    function renderCheckboxGroup(container, items, map, group){
+      container.innerHTML = '';
+      items.forEach(item => {
+        const id = group + '-' + item.id;
+        const label = document.createElement('label');
+        label.className = 'chip';
+        label.setAttribute('for', id);
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.id = id; cb.name = id; cb.checked = !!map.get(item.id);
+        cb.addEventListener('change', () => { map.set(item.id, cb.checked); updateCounts(); });
+
+        const span = document.createElement('span');
+        span.textContent = item.label;
+
+        label.appendChild(cb);
+        label.appendChild(span);
+        container.appendChild(label);
+      });
+    }
+
+    function updateCounts(){
+      const a = [...audiences.values()].filter(Boolean).length;
+      const s = [...subjects.values()].filter(Boolean).length;
+      audCnt.textContent = '선택됨: ' + a + '개';
+      subCnt.textContent = '선택됨: ' + s + '개';
+    }
+
+    function resetSelections(){
+      audiences.clear(); subjects.clear();
+      renderCheckboxGroup(audWrap, audienceOptions, audiences, 'aud');
+      renderCheckboxGroup(subWrap, subjectOptions, subjects, 'sub');
+      updateCounts();
+    }
+
+    function applySelection(){
+      const payload = {
+        grade: grade ? Number(grade) : null,
+        audiences: audienceOptions.filter(o => audiences.get(o.id)).map(o => o.label),
+        subjects:  subjectOptions.filter(o => subjects.get(o.id)).map(o => o.label)
+      };
+
+      // ✅ 결과 전용 페이지로 쿼리스트링 전달 (구조는 그대로, 전송 방식만 변경)
+      const qs = new URLSearchParams();
+      if (payload.grade != null) qs.set('grade', String(payload.grade));
+      if (payload.audiences.length) qs.set('aud', payload.audiences.join(','));
+      if (payload.subjects.length)  qs.set('sub', payload.subjects.join(','));
+
+      // results.html로 이동 → results.html이 Flask API를 호출해 화면에 Top 10 출력
+      window.location.href = 'results.html?' + qs.toString();
+    }
+
+    // 초기 렌더
+    renderCheckboxGroup(audWrap, audienceOptions, audiences, 'aud');
+    renderCheckboxGroup(subWrap, subjectOptions, subjects, 'sub');
+    updateCounts();
+
+    btnReset.addEventListener('click', resetSelections);
+    btnApply.addEventListener('click', applySelection);
+  </script>
+</body>
+</html>

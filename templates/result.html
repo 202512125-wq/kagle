@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>처리 결과 - 도서 대출·소장 통합</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  <div class="max-w-4xl mx-auto p-6">
+    <h1 class="text-2xl font-bold mb-6">처리 결과</h1>
+
+    <div class="bg-white rounded-xl shadow p-6 space-y-3">
+      <p class="text-sm"><b>처리 시각:</b> {{ summary.processed_at }}</p>
+      <p class="text-sm"><b>소장 파일:</b> {{ summary.holdings_path }}</p>
+      <p class="text-sm"><b>대출 파일:</b> {{ summary.loans_path }}</p>
+      <p class="text-sm"><b>저장 위치:</b> {{ summary.output_path }}</p>
+      <div class="flex gap-3 mt-3">
+        <a class="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-white font-medium hover:bg-indigo-700"
+           href="{{ url_for('download_output') }}">결과 CSV 다운로드</a>
+        <a class="inline-flex items-center rounded-lg bg-gray-100 px-4 py-2 font-medium hover:bg-gray-200"
+           href="{{ url_for('index') }}">← 돌아가기</a>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-6 mt-6">
+      <h2 class="font-semibold mb-2">학년 시트 처리</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <div class="font-medium text-green-700">성공</div>
+          <ul class="list-disc pl-5">
+            {% for s in summary.ok_sheets %}
+              <li>{{ s }}</li>
+            {% endfor %}
+            {% if not summary.ok_sheets %}<li>없음</li>{% endif %}
+          </ul>
+        </div>
+        <div>
+          <div class="font-medium text-red-700">건너뜀</div>
+          <ul class="list-disc pl-5">
+            {% for s in summary.skipped_sheets %}
+              <li>{{ s }}</li>
+            {% endfor %}
+            {% if not summary.skipped_sheets %}<li>없음</li>{% endif %}
+          </ul>
+        </div>
+      </div>
+
+      {% if summary.report %}
+      <details class="mt-4">
+        <summary class="cursor-pointer text-gray-700">세부 리포트</summary>
+        <div class="mt-2 overflow-auto">
+          <table class="min-w-full text-sm border">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="p-2 border">시트</th>
+                <th class="p-2 border">상태</th>
+                <th class="p-2 border">키종류</th>
+                <th class="p-2 border">소장열</th>
+                <th class="p-2 border">대출열</th>
+                <th class="p-2 border">행수</th>
+                <th class="p-2 border">고유키</th>
+                <th class="p-2 border">매칭행(&gt;0)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in summary.report %}
+                <tr>
+                  <td class="p-2 border">{{ r.sheet }}</td>
+                  <td class="p-2 border">{{ r.status }}</td>
+                  <td class="p-2 border">{{ r.key_kind if r.key_kind else "-" }}</td>
+                  <td class="p-2 border">{{ r.hold_col if r.hold_col else "-" }}</td>
+                  <td class="p-2 border">{{ r.loan_col if r.loan_col else "-" }}</td>
+                  <td class="p-2 border">{{ r.rows_in_sheet if r.rows_in_sheet else "-" }}</td>
+                  <td class="p-2 border">{{ r.unique_keys_in_sheet if r.unique_keys_in_sheet else "-" }}</td>
+                  <td class="p-2 border">{{ r.matched_rows_gt0 if r.matched_rows_gt0 else "-" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

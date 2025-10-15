@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>학년 선택</title>
+  <style>
+    :root{ --bg:#f7f9fc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e5e7eb; --ring:#93c5fd; }
+    *{ box-sizing:border-box }
+    body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji; color:var(--text); background:linear-gradient(#fff, var(--bg)); }
+    .container{ min-height:100svh; display:grid; place-items:center; padding:20px }
+    .card{ width:min(100%,720px); background:var(--card); border:1px solid var(--border); border-radius:16px; box-shadow:0 10px 30px rgba(2,6,23,.06) }
+    .card-header{ padding:20px 24px; border-bottom:1px solid var(--border) }
+    .title{ font-size:clamp(20px,2.2vw,28px); font-weight:800; margin:0 0 4px }
+    .subtitle{ margin:0; color:var(--muted); font-size:14px }
+    .card-body{ padding:24px }
+    .grid{ display:grid; gap:14px; grid-template-columns:repeat(3,minmax(0,1fr)) }
+    @media (max-width:520px){ .grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    .btn{ display:inline-grid; place-items:center; height:92px; border-radius:14px; border:1px solid var(--border); background:#fff; font-size:22px; font-weight:700; cursor:pointer; transition:transform .06s ease, box-shadow .2s ease }
+    .btn:hover{ box-shadow:0 6px 16px rgba(2,6,23,.06) }
+    .btn:active{ transform:translateY(1px) }
+    .footer{ padding:14px 24px; border-top:1px solid var(--border); color:var(--muted); font-size:12px }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card" role="region" aria-label="학년 선택">
+      <div class="card-header">
+        <h1 class="title">도서 추천 — 학년 선택</h1>
+        <p class="subtitle">1학년부터 9학년까지 선택하세요.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid" id="grade-grid" role="list"></div>
+      </div>
+      <div class="footer">© 2025 — 학년 선택 페이지</div>
+    </div>
+  </div>
+  <script>
+    const grades = [1,2,3,4,5,6,7,8,9];
+    const grid = document.getElementById('grade-grid');
+    grades.forEach(g => {
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.type = 'button';
+      b.setAttribute('role','listitem');
+      b.textContent = g + '학년';
+      b.addEventListener('click', () => {
+        // filters.html로 이동하며 grade 파라미터 전달
+        window.location.href = 'filters.html?grade=' + encodeURIComponent(g);
+      });
+      grid.appendChild(b);
+    });
+  </script>
+</body>
+</html>

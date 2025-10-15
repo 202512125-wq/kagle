@@ -1,0 +1,7 @@
+Flask
+gunicorn
+pandas
+numpy
+openpyxl
+xlrd
+# watchdog  # 서버에선 보통 불필요하면 뺄 수 있음

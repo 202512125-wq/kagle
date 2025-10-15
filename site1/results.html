@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>추천 결과</title>
+  <style>
+    :root{ --bg:#f7f9fc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e5e7eb; --accent:#2563eb; }
+    *{ box-sizing:border-box }
+    body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; color:var(--text); background:linear-gradient(#fff,var(--bg)) }
+    .container{ min-height:100svh; display:grid; place-items:center; padding:20px }
+    .card{ width:min(100%,920px); background:var(--card); border:1px solid var(--border); border-radius:16px; box-shadow:0 10px 30px rgba(2,6,23,.06) }
+    .card-header{ padding:20px 24px; border-bottom:1px solid var(--border) }
+    .title{ font-size:clamp(20px,2.2vw,28px); font-weight:800; margin:0 0 4px }
+    .subtitle{ margin:0; color:var(--muted); font-size:14px }
+    .card-body{ padding:20px 24px }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:space-between; align-items:center }
+    .badge{ display:inline-block; background:#eef2ff; color:#1e293b; padding:8px 12px; border-radius:999px; font-weight:700 }
+    .ghost{ padding:10px 14px; border-radius:10px; background:#fff; border:1px solid var(--border); cursor:pointer; text-decoration:none; color:inherit }
+    .small{ color:var(--muted); font-size:12px }
+    .hr{ height:1px; background:var(--border); margin:18px 0 }
+    .grid{ display:grid; gap:12px; grid-template-columns:repeat(2,minmax(0,1fr)); }
+    @media (max-width:640px){ .grid{ grid-template-columns:1fr; } }
+    .bookbtn{ display:flex; align-items:center; gap:12px; padding:14px 16px; border:1px solid var(--border); border-radius:12px; background:#fff; cursor:pointer; text-decoration:none; color:inherit; transition:box-shadow .15s ease, transform .05s ease }
+    .bookbtn:hover{ box-shadow:0 6px 16px rgba(2,6,23,.06) }
+    .bookbtn:active{ transform:translateY(1px) }
+    .rank{ width:32px; height:32px; display:grid; place-items:center; border-radius:999px; background:#eef2ff; font-weight:800 }
+    .btitle{ font-weight:800; font-size:16px; line-height:1.2 }
+    .bmeta{ color:var(--muted); font-size:12px }
+  </style>
+
+  <!-- SSE & 공유 data.js -->
+  <script>
+    (function(){
+      const sse = new EventSource('/events');
+      let current = null;
+      sse.onmessage = (e)=>{
+        try{
+          const {version} = JSON.parse(e.data||'{}');
+          if(current===null){ current=version; return; }
+          if(version && version!==current){
+            current = version;
+            const old = document.querySelector('script[data-shared="data"]');
+            const s = document.createElement('script');
+            s.src = '/assets/data.js?v=' + Date.now();
+            s.dataset.shared = 'data';
+            s.onload = ()=>{
+              if(window.DATA && !window.CATALOG) window.CATALOG = window.DATA;
+              window.dispatchEvent(new Event('data:updated'));
+            };
+            if(old) old.remove();
+            document.head.appendChild(s);
+          }
+        }catch(_){}
+      };
+    })();
+  </script>
+  <script data-shared="data" src="/assets/data.js"></script>
+  <script>if(window.DATA && !window.CATALOG) window.CATALOG = window.DATA;</script>
+</head>
+<body>
+  <div class="container">
+    <div class="card" role="region" aria-label="추천 결과">
+      <div class="card-header">
+        <h1 class="title">도서 추천 — 결과</h1>
+        <p class="subtitle" id="sel"></p>
+      </div>
+
+      <div class="card-body">
+        <div class="row">
+          <a class="ghost" id="back-filters" href="filters.html">선택 다시 하기</a>
+          <span class="badge" id="grade-badge">?학년</span>
+        </div>
+
+        <div class="hr"></div>
+        <div class="small" id="status">불러오는 중...</div>
+        <div id="grid" class="grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const p = new URLSearchParams(location.search);
+    const grade = p.get('grade');
+    const aud   = (p.get('aud') || '').split(',').filter(Boolean);
+    const sub   = (p.get('sub') || '').split(',').filter(Boolean);
+
+    document.getElementById('grade-badge').textContent = (grade || '?') + '학년';
+    document.getElementById('sel').textContent =
+      `학년: ${grade ?? '(미선택)'} · 자료유형: ${aud.join(', ') || '(전체)'} · 대분류: ${sub.join(', ') || '(전체)'}`;
+    document.getElementById('back-filters').href = 'filters.html' + (grade ? ('?grade='+encodeURIComponent(grade)) : '');
+
+    const baseQS = (() => {
+      const q = new URLSearchParams();
+      if (grade) q.set('grade', grade);
+      if (aud.length) q.set('aud', aud.join(','));
+      if (sub.length) q.set('sub', sub.join(','));
+      return q;
+    })();
+
+    function scoreOf(item){
+      const gcol = grade ? `${grade}학년` : null;
+      if (gcol && item[gcol] != null) return Number(item[gcol]) || 0;
+      if (item["대출빈도"] != null)   return Number(item["대출빈도"]) || 0;
+      if (item["빈도"] != null)       return Number(item["빈도"]) || 0;
+      return 0;
+    }
+
+    function run(){
+      if(!Array.isArray(window.CATALOG)){ return; }
+      const status = document.getElementById('status');
+      const grid = document.getElementById('grid');
+
+      let list = window.CATALOG.slice();
+      if (aud.length) list = list.filter(x => aud.includes(String(x["자료유형"]||"").trim()));
+      if (sub.length) list = list.filter(x => sub.includes(String(x["대분류"]||"").trim()));
+
+      list.forEach(x => x["점수"] = scoreOf(x));
+      list.sort((a,b) => b["점수"] - a["점수"] || String(a["도서명"]||"").localeCompare(String(b["도서명"]||"")));
+      const top = list.slice(0,10);
+
+      status.textContent = `총 ${list.length}권 중 상위 10권을 버튼으로 표시합니다.`;
+      grid.innerHTML = '';
+
+      if(top.length === 0){
+        grid.innerHTML = '<p class="small">조건에 맞는 도서가 없습니다.</p>';
+        return;
+      }
+
+      top.forEach((item, idx) => {
+        const a = document.createElement('a');
+        a.className = 'bookbtn';
+
+        const q = new URLSearchParams(baseQS);
+        if (item["등록번호"]) q.set('reg', item["등록번호"]);
+        else q.set('title', item["도서명"]||'');
+        a.href = 'detail.html?' + q.toString();
+
+        const rank = document.createElement('div');
+        rank.className = 'rank';
+        rank.textContent = String(idx+1);
+
+        const box = document.createElement('div');
+        const t = document.createElement('div');
+        t.className = 'btitle';
+        t.textContent = item["도서명"] || "(제목 없음)";
+        const m = document.createElement('div');
+        m.className = 'bmeta';
+        m.textContent = [
+          item["저자명"] ? `저자: ${item["저자명"]}` : null,
+          item["청구기호"] ? `청구기호: ${item["청구기호"]}` : null,
+          typeof item["점수"] !== 'undefined' ? `점수: ${item["점수"]}` : null
+        ].filter(Boolean).join(' · ');
+
+        box.appendChild(t);
+        box.appendChild(m);
+
+        a.appendChild(rank);
+        a.appendChild(box);
+        grid.appendChild(a);
+      });
+    }
+
+    run();
+    window.addEventListener('data:updated', run);
+  </script>
+</body>
+</html>
