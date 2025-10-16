@@ -759,7 +759,7 @@ def delete_image():
     return redirect(url_for("upload_image"))
 
 # ---- site2: 템플릿 ----
-@app.route("/site2/")
+@app.route("/uploaddata/")
 def site2_index():
     if not (TPL / "index.html").exists():
         return "templates/index.html 없음", 404
@@ -895,12 +895,11 @@ def watch_output():
 
 # ==================== 실행 ====================
 if __name__ == "__main__":
-    # try:
-    #     rebuild_data_js_from_sources()
-    # except Exception:
-    #     pass
+    try:
+        rebuild_data_js_from_sources()
+    except Exception:
+        pass
 
-    # threading.Thread(target=watch_output, daemon=True).start()
+    threading.Thread(target=watch_output, daemon=True).start()
 #    threading.Timer(1.0, lambda: webbrowser.open_new("http://127.0.0.1:5000/site1/")).start()
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
