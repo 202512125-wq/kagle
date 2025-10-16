@@ -4,12 +4,12 @@ from __future__ import annotations
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Set, Tuple
-
+from werkzeug.utils import secure_filename
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    send_from_directory, flash, Response, make_response
+    send_from_directory, flash, Response, make_response,
+    render_template_string
 )
-import os
 import pandas as pd
 import numpy as np
 import json, threading, time, queue, webbrowser, re, os, hashlib, shutil
@@ -25,6 +25,14 @@ DEFAULT_HOLDINGS = ASSETS / "소장도서목록.csv"
 OUTPUT_CSV       = ASSETS / "소장도서목록_학년별대출빈도.csv"
 DATA_JS          = ASSETS / "data.js"
 GRADE_COLS       = [f"{i}학년" for i in range(1, 10)]
+
+# 이미지 업로드 설정
+UPLOAD_DIR = SITE1 / "images"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
+def allowed_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # 열 후보
 CALLNUM_COL_CANDIDATES = [
@@ -46,6 +54,9 @@ KEY_GROUPS = [
 
 app = Flask(__name__, template_folder=str(TPL))
 app.secret_key = "change-this-in-production"
+
+# 용량 제한(선택): 10MB
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 # ==================== SSE (data.js 버전 푸시) ====================
 _data_version = 0
@@ -492,6 +503,210 @@ def site1_files(filename):
     resp.headers["Cache-Control"] = "no-cache"
     return resp
 
+@app.route("/uploadpicture", methods=["GET", "POST"])
+def upload_image():
+    if request.method == "POST":
+        if "file" not in request.files:
+            return "파일이 없습니다.", 400
+        f = request.files["file"]
+        if f.filename == "":
+            return "파일이 선택되지 않았습니다.", 400
+        if not allowed_file(f.filename):
+            return "허용되지 않는 이미지 형식입니다.", 400
+
+        # 안전한 파일명 + 충돌방지 suffix
+        # ✅ 변경 후 (원본 이름 그대로 저장, 동명 파일은 덮어쓰기)
+        filename = secure_filename(f.filename)
+        save_path = UPLOAD_DIR / filename
+        f.save(save_path)
+        
+        size_bytes = (save_path.stat().st_size if save_path.exists() else 0)
+
+        def _fmt_size(n):
+            for unit in ("B","KB","MB","GB"):
+                if n < 1024 or unit == "GB":
+                    return (f"{n:.0f} {unit}" if unit=="B" else f"{n:.1f} {unit}")
+                n /= 1024
+        format_size = _fmt_size(size_bytes)
+
+        file_url = url_for("site1_files", filename=f"images/{save_path.name}", _external=True)
+
+        return render_template_string("""
+            <!doctype html>
+            <html lang="ko">
+            <head>
+            <meta charset="utf-8">
+            <title>업로드 완료</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                :root {
+                --bg:#f7f8fb; --card:#fff; --text:#0f172a; --muted:#6b7280;
+                --border:#e5e7eb; --accent:#111827; --accent-2:#2563eb;
+                }
+                *{box-sizing:border-box}
+                body{margin:0;background:var(--bg);color:var(--text);
+                font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,Arial}
+                .wrap{max-width:860px;margin:40px auto;padding:24px;background:var(--card);
+                border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
+                h1{margin:0 0 16px;font-size:28px}
+                .card{display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start}
+                .preview{background:#f3f4f6;border:1px solid var(--border);border-radius:12px;padding:10px}
+                .preview img{display:block;width:100%;height:auto;border-radius:8px}
+                .filename{font-weight:700;font-size:16px;margin-bottom:6px;word-break:break-all}
+                .sub{color:var(--muted);font-size:13px;margin-bottom:12px}
+                .linklabel{font-size:12px;color:var(--muted)}
+                .copyrow{display:flex;gap:8px;margin:6px 0 16px}
+                .copyrow input{flex:1;padding:10px 12px;border:1px solid var(--border);
+                border-radius:10px;background:#f9fafb}
+                .copyrow button{border:0;background:var(--accent-2);color:#fff;font-weight:700;
+                padding:10px 14px;border-radius:10px;cursor:pointer}
+                .actions{display:flex;gap:10px;flex-wrap:wrap}
+                .btn{display:inline-block;text-decoration:none;background:var(--accent);color:#fff;
+                padding:10px 14px;border-radius:10px;font-weight:700}
+                .btn.outline{background:#fff;color:var(--accent);border:1px solid var(--border)}
+                .btn.ghost{background:transparent;color:var(--accent)}
+                @media (max-width:780px){.card{grid-template-columns:1fr}}
+            </style>
+            </head>
+            <body>
+            <div class="wrap">
+                <h1>✅ 업로드 완료</h1>
+                <div class="card">
+                <div class="preview">
+                    <a href="{{ url }}" target="_blank" title="{{ name }}">
+                    <img src="{{ url }}" alt="{{ name }}">
+                    </a>
+                </div>
+                <div class="meta">
+                    <div class="filename">{{ name }}</div>
+                    <div class="sub">파일 크기: {{ size }}</div>
+
+                    <div class="linklabel">공유 링크</div>
+                    <div class="copyrow">
+                    <input id="link" type="text" readonly value="{{ url }}">
+                    <button type="button" onclick="copyLink()">복사</button>
+                    </div>
+
+                    <div class="actions">
+                    <a class="btn" href="{{ url }}" target="_blank">이미지 열기</a>
+                    <a class="btn outline" href="{{ back }}">다른 이미지 업로드</a>
+                    <a class="btn ghost" href="{{ back }}">목록으로 돌아가기</a>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <script>
+                function copyLink(){
+                const el = document.getElementById('link');
+                el.select(); el.setSelectionRange(0, 99999);
+                document.execCommand('copy');
+                const btn = document.querySelector('.copyrow button');
+                const old = btn.textContent; btn.textContent = '복사됨!';
+                setTimeout(()=>btn.textContent = old, 1200);
+                }
+            </script>
+            </body>
+            </html>
+            """, url=file_url, back=url_for("upload_image"),
+                name=save_path.name, size=format_size)
+
+    # GET: 간단 업로드 폼 + 현재 파일 목록
+    files = sorted([p.name for p in UPLOAD_DIR.iterdir() if p.is_file()])
+    # ✅ 업로드 라우트의 GET 응답 템플릿을 아래로 교체
+    return render_template_string("""
+    <!doctype html>
+    <html lang="ko">
+    <head>
+    <meta charset="utf-8">
+    <title>이미지 업로드</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+        --bg: #f7f8fb;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --accent: #111827;
+        }
+        * { box-sizing: border-box; }
+        body {
+        margin: 0; background: var(--bg); color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans KR, Arial, Apple Color Emoji, Segoe UI Emoji;
+        }
+        .wrap {
+        max-width: 980px; margin: 40px auto; padding: 24px;
+        background: var(--card); border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.06);
+        }
+        h1 { margin: 0 0 4px; font-size: 26px; }
+        .sub { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+
+        form { display: flex; gap: 12px; align-items: center;
+        padding: 14px 0 18px; border-bottom: 1px solid var(--border); }
+        input[type=file] { flex: 1; }
+        button {
+        border: 0; padding: 10px 16px; border-radius: 10px;
+        background: var(--accent); color: #fff; font-weight: 600; cursor: pointer;
+        }
+        button:hover { filter: brightness(1.05); }
+
+        h2 { font-size: 18px; margin: 22px 0 12px; }
+
+        .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 16px;
+        }
+        .card {
+        display: block; text-decoration: none; color: inherit;
+        background: #f9fafb; border: 1px solid var(--border);
+        border-radius: 12px; padding: 12px; transition: transform .08s ease;
+        }
+        .card:hover { transform: translateY(-2px); }
+        .thumb {
+        width: 100%; aspect-ratio: 1/1; object-fit: cover;
+        border-radius: 8px; background: #eef2f7; display: block;
+        }
+        .name {
+        margin-top: 8px; font-size: 14px; line-height: 1.25;
+        word-break: break-all;
+        }
+        .empty { color: var(--muted); }
+    </style>
+    </head>
+    <body>
+    <div class="wrap">
+        <h1>이미지 업로드</h1>
+        <div class="sub">최대 10MB · png, jpg, jpeg, gif, webp, bmp</div>
+
+        <form method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept="image/*">
+        <button type="submit">업로드</button>
+        </form>
+
+        <h2>업로드된 이미지</h2>
+
+        {% if files %}
+        <div class="grid">
+            {% for f in files %}
+            {% set u = url_for('site1_files', filename='images/' + f) %}
+            <a class="card" href="{{ u }}" target="_blank" title="{{ f }}">
+                <img class="thumb" src="{{ u }}" alt="{{ f }}">
+                <div class="name">{{ f }}</div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty">아직 업로드된 이미지가 없습니다.</p>
+        {% endif %}
+    </div>
+    </body>
+    </html>
+    """, files=files)
+
+
 # ---- site2: 템플릿 ----
 @app.route("/site2/")
 def site2_index():
@@ -627,7 +842,6 @@ def watch_output():
             pass
         time.sleep(0.7)
 
-# ==================== 실행 ====================
 if __name__ == "__main__":
     # try:
     #     rebuild_data_js_from_sources()
@@ -638,4 +852,3 @@ if __name__ == "__main__":
 #    threading.Timer(1.0, lambda: webbrowser.open_new("http://127.0.0.1:5000/site1/")).start()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
-
